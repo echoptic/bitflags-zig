@@ -3,41 +3,40 @@ const testing = std.testing;
 const debug = std.debug;
 const builtin = std.builtin;
 const meta = std.meta;
+const math = std.math;
+const fmt = std.fmt;
 
-const TypeInfo = builtin.TypeInfo;
-const StructField = TypeInfo.StructField;
+const Type = builtin.Type;
+const StructField = Type.StructField;
+const Declaration = Type.Declaration;
 
 const pad_str = "__pad";
 const max_pad_size = pad_str.len + 3;
 
-pub fn BitFlags(comptime num_bits: usize, comptime T: anytype) type {
+pub fn BitFlags(comptime size: type, comptime T: anytype) type {
+    const bits = @typeInfo(size).Int.bits;
     var pad_num = 0;
     var num_fields = 0;
     var prev_bit = 0;
-    var fields: [num_bits]StructField = undefined;
+    var fields: [bits]StructField = undefined;
 
     for (@typeInfo(@TypeOf(T)).Struct.fields) |f| {
-        const bit_pos = blk: {
-            var buf: [num_bits]u8 = undefined;
-            break :blk (try std.fmt.bufPrint(&buf, "{b}", .{f.default_value})).len;
-        };
+        const field_type = f.field_type;
+        const bit = math.log2(@ptrCast(*align(1) const field_type, f.default_value.?).*) + 1;
 
         defer {
             num_fields += 1;
-            prev_bit = bit_pos;
+            prev_bit = bit;
         }
 
-        const padding = bit_pos - prev_bit - 1;
+        const padding = bit - prev_bit - 1;
         if (padding != 0) {
             defer {
                 num_fields += 1;
                 pad_num += 1;
             }
 
-            const name = blk: {
-                var buf: [max_pad_size]u8 = undefined;
-                break :blk try std.fmt.bufPrint(&buf, "{s}{}", .{ pad_str, pad_num });
-            };
+            const name = fmt.comptimePrint("{s}{}", .{ pad_str, pad_num });
 
             fields[num_fields] = .{
                 .name = name,
@@ -57,17 +56,14 @@ pub fn BitFlags(comptime num_bits: usize, comptime T: anytype) type {
         };
     }
 
-    if (prev_bit != num_bits) {
+    if (prev_bit != bits) {
         defer num_fields += 1;
 
-        const name = blk: {
-            var buf: [max_pad_size]u8 = undefined;
-            break :blk try std.fmt.bufPrint(&buf, "{s}{}", .{ pad_str, pad_num });
-        };
+        const name = fmt.comptimePrint("{s}{}", .{ pad_str, pad_num });
 
         fields[num_fields] = .{
             .name = name,
-            .field_type = meta.Int(.unsigned, num_bits - prev_bit),
+            .field_type = meta.Int(.unsigned, bits - prev_bit),
             .default_value = null,
             .is_comptime = false,
             .alignment = 0,
@@ -78,7 +74,7 @@ pub fn BitFlags(comptime num_bits: usize, comptime T: anytype) type {
         .Struct = .{
             .layout = .Packed,
             .fields = fields[0..num_fields],
-            .decls = &[_]TypeInfo.Declaration{},
+            .decls = &[_]Declaration{},
             .is_tuple = false,
         },
     });
@@ -100,7 +96,7 @@ test "fields test" {
         __pad3: u1,
     };
 
-    const Flags = BitFlags(16, .{
+    const Flags = BitFlags(u16, .{
         .public = 0x1,
         .final = 0x10,
         .super = 0x20,
@@ -117,31 +113,9 @@ test "fields test" {
         try testing.expect(flags.len == expected.len);
 
         var i: usize = 0;
-        inline while (i < flags.len) : (i += 1) {
+        while (i < flags.len) : (i += 1) {
             try testing.expect(std.mem.eql(u8, flags[i].name, expected[i].name) and
                 flags[i].field_type == expected[i].field_type);
         }
-    }
-}
-
-test "size test" {
-    {
-        const size = 8;
-        const Flags = BitFlags(size, .{
-            .f1 = 0x1,
-            .f2 = 0x20,
-        });
-
-        try testing.expect(@bitSizeOf(Flags) == size);
-    }
-
-    {
-        const size = 16;
-        const Flags = BitFlags(size, .{
-            .f1 = 0x1,
-            .f2 = 0x20,
-        });
-
-        try testing.expect(@bitSizeOf(Flags) == size);
     }
 }
