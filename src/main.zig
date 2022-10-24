@@ -10,8 +10,7 @@ const Type = builtin.Type;
 const StructField = Type.StructField;
 const Declaration = Type.Declaration;
 
-const pad_str = "__pad";
-const max_pad_size = pad_str.len + 3;
+const PAD_STR = "__pad";
 
 pub fn BitFlags(comptime size: type, comptime T: anytype) type {
     const bits = @typeInfo(size).Int.bits;
@@ -36,7 +35,7 @@ pub fn BitFlags(comptime size: type, comptime T: anytype) type {
                 pad_num += 1;
             }
 
-            const name = fmt.comptimePrint("{s}{}", .{ pad_str, pad_num });
+            const name = fmt.comptimePrint("{s}{}", .{ PAD_STR, pad_num });
 
             fields[num_fields] = .{
                 .name = name,
@@ -49,7 +48,7 @@ pub fn BitFlags(comptime size: type, comptime T: anytype) type {
 
         fields[num_fields] = .{
             .name = f.name,
-            .field_type = u1,
+            .field_type = bool,
             .default_value = null,
             .is_comptime = false,
             .alignment = 0,
@@ -59,7 +58,7 @@ pub fn BitFlags(comptime size: type, comptime T: anytype) type {
     if (prev_bit != bits) {
         defer num_fields += 1;
 
-        const name = fmt.comptimePrint("{s}{}", .{ pad_str, pad_num });
+        const name = fmt.comptimePrint("{s}{}", .{ PAD_STR, pad_num });
 
         fields[num_fields] = .{
             .name = name,
@@ -81,21 +80,6 @@ pub fn BitFlags(comptime size: type, comptime T: anytype) type {
 }
 
 test "fields test" {
-    const Expected = packed struct {
-        public: u1,
-        __pad0: u3,
-        final: u1,
-        super: u1,
-        __pad1: u3,
-        interface: u1,
-        abstract: u1,
-        __pad2: u1,
-        synthetic: u1,
-        annotation: u1,
-        enum_: u1,
-        __pad3: u1,
-    };
-
     const Flags = BitFlags(u16, .{
         .public = 0x1,
         .final = 0x10,
@@ -106,6 +90,21 @@ test "fields test" {
         .annotation = 0x2000,
         .enum_ = 0x4000,
     });
+
+    const Expected = packed struct {
+        public: bool,
+        __pad0: u3,
+        final: bool,
+        super: bool,
+        __pad1: u3,
+        interface: bool,
+        abstract: bool,
+        __pad2: u1,
+        synthetic: bool,
+        annotation: bool,
+        enum_: bool,
+        __pad3: u1,
+    };
 
     comptime {
         const flags = @typeInfo(Flags).Struct.fields;
